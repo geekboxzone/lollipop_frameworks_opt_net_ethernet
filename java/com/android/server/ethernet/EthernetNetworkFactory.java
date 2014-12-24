@@ -42,6 +42,8 @@ import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.text.TextUtils;
 import android.util.Log;
+import android.content.Intent;
+import android.os.UserHandle;
 
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.net.BaseNetworkObserver;
@@ -100,6 +102,15 @@ class EthernetNetworkFactory {
     private static boolean mLinkUp;
     private NetworkInfo mNetworkInfo;
     private LinkProperties mLinkProperties;
+    private int mEthernetCurrentState;
+
+    private void sendEthernetStateChangedBroadcast(int curState) {
+        mEthernetCurrentState = curState;
+        final Intent intent = new Intent(EthernetManager.ETHERNET_STATE_CHANGED_ACTION);
+        intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT); 
+        intent.putExtra(EthernetManager.EXTRA_ETHERNET_STATE, curState);
+        mContext.sendStickyBroadcastAsUser(intent, UserHandle.ALL);
+    }
 
     EthernetNetworkFactory(RemoteCallbackList<IEthernetServiceListener> listeners) {
         mNetworkInfo = new NetworkInfo(ConnectivityManager.TYPE_ETHERNET, 0, NETWORK_TYPE, "");
@@ -137,6 +148,7 @@ class EthernetNetworkFactory {
             if (!up) {
                 // Tell the agent we're disconnected. It will call disconnect().
                 mNetworkInfo.setDetailedState(DetailedState.DISCONNECTED, null, mHwAddr);
+                sendEthernetStateChangedBroadcast(EthernetManager.ETHER_STATE_DISCONNECTED);
             }
             updateAgent();
             // set our score lower than any network could go
@@ -213,6 +225,7 @@ class EthernetNetworkFactory {
             mNetworkInfo.setExtraInfo(null);
             mLinkUp = false;
             mNetworkInfo.setDetailedState(DetailedState.DISCONNECTED, null, mHwAddr);
+            sendEthernetStateChangedBroadcast(EthernetManager.ETHER_STATE_DISCONNECTED);
             updateAgent();
             mNetworkAgent = null;
             mNetworkInfo = new NetworkInfo(ConnectivityManager.TYPE_ETHERNET, 0, NETWORK_TYPE, "");
@@ -273,6 +286,7 @@ class EthernetNetworkFactory {
                     }
                     linkProperties = config.getStaticIpConfiguration().toLinkProperties(mIface);
                 } else {
+                    sendEthernetStateChangedBroadcast(EthernetManager.ETHER_STATE_CONNECTING);
                     mNetworkInfo.setDetailedState(DetailedState.OBTAINING_IPADDR, null, mHwAddr);
 
                     DhcpResults dhcpResults = new DhcpResults();
@@ -309,6 +323,7 @@ class EthernetNetworkFactory {
                     mLinkProperties = linkProperties;
                     mNetworkInfo.setIsAvailable(true);
                     mNetworkInfo.setDetailedState(DetailedState.CONNECTED, null, mHwAddr);
+                    sendEthernetStateChangedBroadcast(EthernetManager.ETHER_STATE_CONNECTED);
 
                     // Create our NetworkAgent.
                     mNetworkAgent = new NetworkAgent(mFactory.getLooper(), mContext,
@@ -322,6 +337,7 @@ class EthernetNetworkFactory {
                                     mLinkProperties.clear();
                                     mNetworkInfo.setDetailedState(DetailedState.DISCONNECTED, null,
                                             mHwAddr);
+                                    sendEthernetStateChangedBroadcast(EthernetManager.ETHER_STATE_DISCONNECTED);
                                     updateAgent();
                                     mNetworkAgent = null;
                                     try {
@@ -406,6 +422,7 @@ class EthernetNetworkFactory {
         // TODO: stop using explicit comparisons to DISCONNECTED / SUSPENDED in ConnectivityService,
         // and instead use isConnectedOrConnecting().
         mNetworkInfo.setDetailedState(DetailedState.DISCONNECTED, null, mHwAddr);
+        sendEthernetStateChangedBroadcast(EthernetManager.ETHER_STATE_DISCONNECTED);
         mLinkUp = false;
         updateAgent();
         mLinkProperties = new LinkProperties();
