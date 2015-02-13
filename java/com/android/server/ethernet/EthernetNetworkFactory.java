@@ -421,6 +421,12 @@ class EthernetNetworkFactory {
         //
         // TODO: stop using explicit comparisons to DISCONNECTED / SUSPENDED in ConnectivityService,
         // and instead use isConnectedOrConnecting().
+        try {
+               mNMService.clearInterfaceAddresses(mIface);
+        } catch (Exception e) {
+              Log.e(TAG, "Failed to clear addresses or disable ipv6" + e);
+        }
+
         mNetworkInfo.setDetailedState(DetailedState.DISCONNECTED, null, mHwAddr);
         sendEthernetStateChangedBroadcast(EthernetManager.ETHER_STATE_DISCONNECTED);
         mLinkUp = false;
