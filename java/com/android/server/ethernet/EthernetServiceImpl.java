@@ -168,9 +168,8 @@ public class EthernetServiceImpl extends IEthernetManager.Stub {
         enforceAccessPermission();
         mListeners.unregister(listener);
     }
-    /*
-    *@hide
-    */
+
+    @Override
     public int getEthernetConnectState() {
         // enforceAccessPermission();
         Log.d(TAG,"getEthernetEnabledState() : Entered.");
