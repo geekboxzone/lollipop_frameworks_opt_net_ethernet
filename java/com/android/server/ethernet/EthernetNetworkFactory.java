@@ -102,7 +102,7 @@ class EthernetNetworkFactory {
     private static boolean mLinkUp;
     private NetworkInfo mNetworkInfo;
     private LinkProperties mLinkProperties;
-    private int mEthernetCurrentState;
+    public int mEthernetCurrentState = EthernetManager.ETHER_STATE_DISCONNECTED;
 
     private void sendEthernetStateChangedBroadcast(int curState) {
         mEthernetCurrentState = curState;
@@ -269,6 +269,15 @@ class EthernetNetworkFactory {
         }
     }
 
+    Handler handler = new Handler();
+    Runnable runnable = new Runnable() {
+        @Override
+        public void run() {
+          // TODO Auto-generated method stub
+              onRequestNetwork();
+        }
+    };
+    private static int tryCount=3;
     /* Called by the NetworkFactory on the handler thread. */
     public void onRequestNetwork() {
         // TODO: Handle DHCP renew.
@@ -296,6 +305,10 @@ class EthernetNetworkFactory {
                     // we will lose our IP address and connectivity without
                     // noticing.
                     if (!NetworkUtils.runDhcp(mIface, dhcpResults)) {
+                        if(tryCount > 0) {
+                            tryCount--;
+                            handler.postDelayed(runnable, 1000);
+                        }
                         Log.e(TAG, "DHCP request error:" + NetworkUtils.getDhcpError());
                         // set our score lower than any network could go
                         // so we get dropped.
