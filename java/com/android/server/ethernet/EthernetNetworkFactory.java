@@ -74,6 +74,7 @@ class EthernetNetworkFactory {
     private static final String TAG = "EthernetNetworkFactory";
     private static final int NETWORK_SCORE = 70;
     private static final boolean DBG = true;
+    private static final boolean VDBG = false;
 
     /** Tracks interface changes. Called from NetworkManagementService. */
     private InterfaceObserver mInterfaceObserver;
@@ -104,6 +105,9 @@ class EthernetNetworkFactory {
     private LinkProperties mLinkProperties;
     public int mEthernetCurrentState = EthernetManager.ETHER_STATE_DISCONNECTED;
 
+    private void LOGV(String code) {
+        if(VDBG) Log.d(TAG,code);
+    }
     private void sendEthernetStateChangedBroadcast(int curState) {
         mEthernetCurrentState = curState;
         final Intent intent = new Intent(EthernetManager.ETHERNET_STATE_CHANGED_ACTION);
@@ -254,7 +258,10 @@ class EthernetNetworkFactory {
 
     public void updateAgent() {
         synchronized (EthernetNetworkFactory.this) {
-            if (mNetworkAgent == null) return;
+            if (mNetworkAgent == null) {
+                 LOGV("updateAgent== null return");
+                 return;
+            }
             if (DBG) {
                 Log.i(TAG, "Updating mNetworkAgent with: " +
                       mNetworkCapabilities + ", " +
@@ -268,7 +275,7 @@ class EthernetNetworkFactory {
             mNetworkAgent.sendNetworkScore(mLinkUp? NETWORK_SCORE : 0);
         }
     }
-
+/*
     Handler handler = new Handler();
     Runnable runnable = new Runnable() {
         @Override
@@ -278,7 +285,8 @@ class EthernetNetworkFactory {
         }
     };
     private static int tryCount=3;
-    /* Called by the NetworkFactory on the handler thread. */
+*/
+   /* Called by the NetworkFactory on the handler thread. */
     public void onRequestNetwork() {
         // TODO: Handle DHCP renew.
         Thread dhcpThread = new Thread(new Runnable() {
@@ -305,10 +313,10 @@ class EthernetNetworkFactory {
                     // we will lose our IP address and connectivity without
                     // noticing.
                     if (!NetworkUtils.runDhcp(mIface, dhcpResults)) {
-                        if(tryCount > 0) {
+                       /* if(tryCount > 0) {
                             tryCount--;
                             handler.postDelayed(runnable, 1000);
-                        }
+                        }*/
                         Log.e(TAG, "DHCP request error:" + NetworkUtils.getDhcpError());
                         // set our score lower than any network could go
                         // so we get dropped.
@@ -407,6 +415,7 @@ class EthernetNetworkFactory {
             for (String iface : ifaces) {
                 synchronized(this) {
                     if (maybeTrackInterface(iface)) {
+                        NetworkUtils.stopDhcp(iface);
                         // We have our interface. Track it.
                         // Note: if the interface already has link (e.g., if we
                         // crashed and got restarted while it was running),
