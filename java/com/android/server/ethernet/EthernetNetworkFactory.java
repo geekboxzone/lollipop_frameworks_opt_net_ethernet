@@ -44,6 +44,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.content.Intent;
 import android.os.UserHandle;
+import android.provider.Settings;
 
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.net.BaseNetworkObserver;
@@ -51,6 +52,14 @@ import com.android.server.net.BaseNetworkObserver;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 
+import java.io.File;
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.lang.Exception;
 
 /**
  * Manages connectivity for an Ethernet interface.
@@ -72,7 +81,7 @@ import java.io.PrintWriter;
 class EthernetNetworkFactory {
     private static final String NETWORK_TYPE = "Ethernet";
     private static final String TAG = "EthernetNetworkFactory";
-    private static final int NETWORK_SCORE = 70;
+    private static final int NETWORK_SCORE = 150;
     private static final boolean DBG = true;
     private static final boolean VDBG = false;
 
@@ -104,6 +113,7 @@ class EthernetNetworkFactory {
     private NetworkInfo mNetworkInfo;
     private LinkProperties mLinkProperties;
     public int mEthernetCurrentState = EthernetManager.ETHER_STATE_DISCONNECTED;
+    public int ethCurrentIfaceState = EthernetManager.ETHER_IFACE_STATE_DOWN;
 
     private void LOGV(String code) {
         if(VDBG) Log.d(TAG,code);
@@ -114,6 +124,17 @@ class EthernetNetworkFactory {
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT); 
         intent.putExtra(EthernetManager.EXTRA_ETHERNET_STATE, curState);
         mContext.sendStickyBroadcastAsUser(intent, UserHandle.ALL);
+    }
+    private void sendEthIfaceStateChangedBroadcast(int curState) {
+        final Intent intent = new Intent(EthernetManager.ETHERNET_IFACE_STATE_CHANGED_ACTION);
+        intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);  //  
+        intent.putExtra(EthernetManager.EXTRA_ETHERNET_IFACE_STATE, curState);
+        ethCurrentIfaceState = curState;
+        Settings.Secure.putInt(mContext.getContentResolver(),
+                                 Settings.Secure.ETHERNET_ON,
+                                 curState);
+
+        mContext.sendStickyBroadcast(intent);
     }
 
     EthernetNetworkFactory(RemoteCallbackList<IEthernetServiceListener> listeners) {
@@ -134,7 +155,6 @@ class EthernetNetworkFactory {
         protected void stopNetwork() {
         }
     }
-
 
     /**
      * Updates interface state variables.
@@ -179,9 +199,103 @@ class EthernetNetworkFactory {
         }
     }
 
+    public int getEthernetIfaceState() {
+        // enforceAccessPermission();
+        //Log.d(TAG, "getEthernetIfaceState()");
+        File file = new File("/sys/class/net/"+mIface+"/flags");
+        String flags = ReadFromFile(file);
+//        Log.d(TAG, "flags="+flags);
+        if (flags == null) {
+            return EthernetManager.ETHER_IFACE_STATE_DOWN;
+        }
+
+        String flags_no_0x = flags.substring(2);
+        int flags_int = Integer.parseInt(flags_no_0x, 16);
+        if ((flags_int & 0x1)>0) {
+//            Log.d(TAG, "state=up");
+            return EthernetManager.ETHER_IFACE_STATE_UP;
+        } else {
+//            Log.d(TAG, "state=down");
+            return EthernetManager.ETHER_IFACE_STATE_DOWN;
+        }
+    }
+
+    private String ReadFromFile(File file) {
+        if((file != null) && file.exists()) {
+            try {
+                FileInputStream fin= new FileInputStream(file);
+                BufferedReader reader= new BufferedReader(new InputStreamReader(fin));
+                String flag = reader.readLine();
+                fin.close();
+                return flag;
+            }
+            catch(IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        return null;
+    }
+
+
+/*
+    public int getEthernetIfaceState() {
+        try {
+            final String[] ifaces = mNMService.listInterfaces();
+            for (String iface : ifaces) {
+                if (iface.matches(mIfaceMatch)) {
+                    if (mNMService.getInterfaceConfig(iface).hasFlag("running")) {
+                    }
+                }
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Could not get list of interfaces " + e);
+        }
+
+        return ETHER_IFACE_STATE_UP;
+    }
+*/
+    private void interfaceDown(String iface) {
+        mNetworkInfo.setIsAvailable(false);
+        sendEthIfaceStateChangedBroadcast(EthernetManager.ETHER_IFACE_STATE_DOWN);
+
+        mLinkProperties.clear();
+    }
+
+    public boolean setInterfaceDown() {
+        try {
+           if(!TextUtils.isEmpty(mIface)) {
+               mNMService.setInterfaceDown(mIface);
+               sendEthIfaceStateChangedBroadcast(EthernetManager.ETHER_IFACE_STATE_DOWN);
+               return true;
+           }
+           else 
+              Log.e(TAG,"mIface is null");
+        }catch (Exception e) {
+            Log.e(TAG, "Error downing interface " + mIface + ": " + e);
+        }
+        return false;
+    }
+    public boolean setInterfaceUp() {
+       try {
+           if(!TextUtils.isEmpty(mIface)) {
+               mNMService.setInterfaceUp(mIface);
+               sendEthIfaceStateChangedBroadcast(EthernetManager.ETHER_IFACE_STATE_UP);
+               return true;
+           }
+           else
+              Log.e(TAG,"mIface is null");
+        }catch (Exception e) {
+            Log.e(TAG, "Error downing interface " + mIface + ": " + e);
+        }
+      return false;
+    }
     private void setInterfaceUp(String iface) {
         // Bring up the interface so we get link status indications.
+        int ethernet_on = Settings.Secure.getInt(mContext.getContentResolver(), Settings.Secure.ETHERNET_ON, 0);
+
         try {
+            //if(ethernet_on == 1)   
             mNMService.setInterfaceUp(iface);
             String hwAddr = null;
             InterfaceConfiguration config = mNMService.getInterfaceConfig(iface);
@@ -201,6 +315,9 @@ class EthernetNetworkFactory {
                     mNMService.setInterfaceDown(iface);
                 }
             }
+            if(ethernet_on == 0)
+                mNMService.setInterfaceDown(iface);
+
         } catch (Exception e) {
             Log.e(TAG, "Error upping interface " + mIface + ": " + e);
         }
@@ -318,6 +435,7 @@ class EthernetNetworkFactory {
                             handler.postDelayed(runnable, 1000);
                         }*/
                         Log.e(TAG, "DHCP request error:" + NetworkUtils.getDhcpError());
+                        sendEthernetStateChangedBroadcast(EthernetManager.ETHER_STATE_DISCONNECTED); 
                         // set our score lower than any network could go
                         // so we get dropped.
                         mFactory.setScoreFilter(-1);

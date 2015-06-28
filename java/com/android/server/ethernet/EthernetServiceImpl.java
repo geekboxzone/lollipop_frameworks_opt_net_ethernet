@@ -36,6 +36,7 @@ import com.android.internal.util.IndentingPrintWriter;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.concurrent.atomic.AtomicBoolean;
+import android.provider.Settings;
 
 /**
  * EthernetServiceImpl handles remote Ethernet operation requests by implementing
@@ -85,6 +86,16 @@ public class EthernetServiceImpl extends IEthernetManager.Stub {
                 "ConnectivityService");
     }
 
+    public boolean setEthernetEnabled(boolean enable) {
+        //enforceChangePermission();
+        Log.i(TAG,"setEthernetEnabled() : enable="+enable);
+        if ( enable ) {
+           return mTracker.setInterfaceUp();
+        } else {
+           return mTracker.setInterfaceDown(); 
+        }
+    }
+
     public void start() {
         Log.i(TAG, "Starting Ethernet service");
 
@@ -95,6 +106,10 @@ public class EthernetServiceImpl extends IEthernetManager.Stub {
         mTracker.start(mContext, mHandler);
 
         mStarted.set(true);
+/*      int ethernet_on = Settings.Secure.getInt(mContext.getContentResolver(), Settings.Secure.ETHERNET_ON, 0);
+        if(ethernet_on == 0 ) {
+           setEthernetEnabled(false);
+        }  */
     }
 
     /**
@@ -175,7 +190,10 @@ public class EthernetServiceImpl extends IEthernetManager.Stub {
         Log.d(TAG,"getEthernetEnabledState() : Entered.");
         return mTracker.mEthernetCurrentState;
     }
-
+    @Override
+    public int getEthernetIfaceState() {
+        return mTracker.getEthernetIfaceState();
+    }
     @Override
     protected void dump(FileDescriptor fd, PrintWriter writer, String[] args) {
         final IndentingPrintWriter pw = new IndentingPrintWriter(writer, "  ");
