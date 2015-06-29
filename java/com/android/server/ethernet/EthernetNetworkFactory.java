@@ -292,7 +292,7 @@ class EthernetNetworkFactory {
     }
     private void setInterfaceUp(String iface) {
         // Bring up the interface so we get link status indications.
-        int ethernet_on = Settings.Secure.getInt(mContext.getContentResolver(), Settings.Secure.ETHERNET_ON, 0);
+        int ethernet_on = Settings.Secure.getInt(mContext.getContentResolver(), Settings.Secure.ETHERNET_ON, 1);
 
         try {
             //if(ethernet_on == 1)   
